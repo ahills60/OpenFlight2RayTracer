@@ -522,7 +522,8 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
         "\n",
         "#include \"scenecalcs.h\"\n",
         "#include \"renderscene.h\"\n",
-        "#include <SOIL/SOIL.h>",
+        "#include <SOIL/SOIL.h>\n\n",
+        "// This script is for model \"" + str(modelName) + "\"\n",
         "\n",
         "// Called to draw scene\n",
         "void RenderScene(void)\n",
@@ -541,6 +542,8 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
         "glPushMatrix();\n",
         "glRotatef(xRot, 1.0f, 0.0f, 0.0f);\n",
         "glRotatef(yRot, 0.0f, 1.0f, 0.0f);\n",
+        "glRotatef(zRot, 0.0f, 0.0f, 1.0f);\n",
+        "glScalef(scale, scale, scale);\n",
         "\n",
         "\n",
         "// Nose Cone /////////////////////////////\n",
@@ -565,25 +568,32 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
     outFile.writelines(HEADER)
     tempStr = ""
     for idx, filen in enumerate(textureFilenames):
-        tempStr += "texture_ids[" + str(idx) + "] = SOIL_load_OGL_texture\n(\n\"" + filen + "\",\nSOIL_LOAD_AUTO,\nSOIL_CREATE_NEW_ID,\nSOIL_FLAG_INVERT_Y\n);\n"
+        tempStr += "// texture_ids[" + str(idx) + "] = SOIL_load_OGL_texture\n//(\n//\"" + filen + "\",\n//SOIL_LOAD_AUTO,\n//SOIL_CREATE_NEW_ID,\n//SOIL_FLAG_INVERT_Y\n//);\n"
     outFile.write(tempStr)
     
     for idx in range(len(textureFilenames)):
-        outFile.write("if(texture_ids[" + str(idx) + "] == 0)\n\tprintf(\"Soil loading error with texture " + str(idx) + ".\\n\");\n")
+        outFile.write("//if(texture_ids[" + str(idx) + "] == 0)\n\t//printf(\"Soil loading error with texture " + str(idx) + ".\\n\");\n")
         # "//\tcerr << \"SOIL loading error: '\" << SOIL_last_result() << \"' (\" << \"" + textureFilename + "\" << \")\" << endl;\n",
     outFile.write("glGenTextures(num_textures, texture_ids);\n")
     
     for idx, filen in enumerate(textureFilenames):
-        outFile.write("{\nint img_width, img_height;\n")
+        outFile.write("{\nint img_width, img_height, channels;\n")
+        outFile.write("GLenum format = GL_RGBA;\n")
         outFile.write("glActiveTexture(GL_TEXTURE0 + " + str(idx) + ");\n",)
-        outFile.write("unsigned char* img = SOIL_load_image(\"" + filen + "\", &img_width, &img_height, NULL, 0);\n\n")
+        outFile.write("unsigned char* img = SOIL_load_image(\"" + filen + "\", &img_width, &img_height, &channels, SOIL_LOAD_AUTO);\n\n")
+        outFile.write("if(channels == 3)\n")
+        outFile.write("\tformat = GL_RGB;\n")
+        outFile.write("else\n{\n")
+        outFile.write("//printf(\"Channels: \%i\\n\", channels);\n")
+        outFile.write("\tglEnable(GL_BLEND);\n\tglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);\n}\n")
         outFile.write("glEnable(GL_TEXTURE_2D);\n")
         outFile.write("glBindTexture(GL_TEXTURE_2D, texture_ids[" + str(idx) + "]);\n")
         # "//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);\n",
         # "//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);\n",
         # "//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);\n",
         outFile.write("glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);\n")
-        outFile.write("glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, img_width, img_height, 0, GL_RGB, GL_UNSIGNED_BYTE, img);\n}\n")
+        outFile.write("glTexImage2D(GL_TEXTURE_2D, 0, channels, img_width, img_height, 0, format, GL_UNSIGNED_BYTE, img);\n")
+        outFile.write("SOIL_free_image_data(img);\n}\n")
     
     outFile.writelines(HEADERCONT)
     
