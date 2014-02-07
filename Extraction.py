@@ -193,6 +193,32 @@ def VertexListToCoords(dictIn):
         if len(tempList) > 0:
             newObject[key[key.rindex(os.path.sep)+1:key.rindex('.')]] = np.vstack(tempList)
     return newObject
+    
+def VertexListToCoordsMaster(dictIn):
+    """
+        The input to this function should be the complete records dictionary.
+        
+        This function outputs a dictionary of NumPy coordinates.
+    """
+    if not isinstance(dictIn, dict):
+        raise Exception('Input it not a dictionary object.')
+    
+    # This is similar to the ExtractExternal function.
+    tempList = []
+    
+    if 'VertexList' not in dictIn:
+        raise Exception("Unable to find the vertex list.")
+    
+    for item in dictIn['VertexList']:
+        tempMat = None
+        for idx, offset in enumerate(item):
+            if tempMat is None:
+                tempMat = np.zeros((len(item), max(dictIn['Vertices'][offset]['Coordinate'].shape)))
+            tempMat[idx, :] = dictIn['Vertices'][offset]['Coordinate']
+        tempList.append(tempMat)
+    if len(tempList) > 0:
+        newObject = np.vstack(tempList)
+    return newObject
 
 
 def CreateHeaderFiles(modelName, dictIn, filename = "scene.h", scale = 20):
@@ -350,6 +376,53 @@ def GetThisRecord(dictIn, recordName):
             newObject[key[key.rindex(os.path.sep)+1:key.rindex('.')]] = tempList
     return newObject
 
+def GetThisRecordMaster(dictIn, recordName):
+    """
+        The input to this function should be the complete records dictionary.
+        
+        This function outputs vertex list records.
+    """
+    
+    if not isinstance(dictIn, dict):
+        raise Exception('Input it not a dictionary object.')
+    
+    newObject = dict()
+    
+    def ProcessList(listObject):
+        vList = []
+        if not isinstance(listObject, list):
+            return
+        # This is a list
+        for item in listObject:
+            if isinstance(item, list):
+                tempList = ProcessList(item)
+                if len(tempList) > 0:
+                    vList.extend(tempList)
+            elif isinstance(item, dict):
+                if 'Datatype' not in item:
+                    continue
+                else:
+                    if item['Datatype'] == recordName:
+                        vList.append(item)
+        return vList
+    
+    # This is similar to the ExtractExternal function.
+    print "Processing..."
+    
+    tempList = []
+    for item in dictIn['Tree']:
+        # This will go through the list of objects:
+        if isinstance(item, list):
+            tempList.extend(ProcessList(item))
+        elif isinstance(item, dict):
+            if 'Datatype' not in item:
+                continue
+            if item['Datatype'] == recordName:
+                tempList.append(item)
+    if len(tempList) > 0:
+        newObject = tempList
+    return newObject
+
 def CreateTexturedHeaderFile(modelName, dictIn, filename = "scene.h", scale = 5):
     coordinates = VertexListToCoords(dictIn)
     if modelName not in coordinates:
@@ -495,27 +568,68 @@ def VertexListToComplexTextureCoords(dictIn):
             newObject[key[key.rindex(os.path.sep)+1:key.rindex('.')]]['TexturePattern'] = np.vstack(tempList2)
     return newObject
 
+def VertexListToComplexTextureCoordsMaster(dictIn):
+    """
+        The input to this function should be the complete records dictionary.
+        
+        This function outputs a dictionary of NumPy coordinates.
+    """
+    if not isinstance(dictIn, dict):
+        raise Exception('Input it not a dictionary object.')
+    
+    # This is similar to the ExtractExternal function.
+    tempList = []
+    tempList2 = []
+    
+    if 'VertexList' not in dictIn:
+        raise Exception("Unable to find the vertex list.")
+    
+    for item, txpidx in zip(dictIn['VertexList'], dictIn['TexturePatterns']):
+        tempMat = None
+        for idx, offset in enumerate(item):
+            if tempMat is None:
+                tempMat = np.zeros((len(item), max(dictIn['Vertices'][offset]['TextureCoordinate'].shape)))
+            tempMat[idx, :] = dictIn['Vertices'][offset]['TextureCoordinate']
+        tempList.append(tempMat)
+        tempList2.append(np.ones((len(item), 1)) * txpidx)
+    if len(tempList) > 0:
+        newObject = dict()
+        newObject['Coords'] = np.vstack(tempList)
+        newObject['TexturePattern'] = np.vstack(tempList2)
+    return newObject
+
 
 def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scale = 5):
-    coordinates = VertexListToCoords(dictIn)
-    if modelName not in coordinates:
-        raise Exception("Unable to find model \"" + modelName + "\"")
-    
-    textureFiles = GetThisRecord(dictIn, "TexturePalette")[modelName]
+    if modelName is None:
+        coordinates = VertexListToCoordsMaster(dictIn)
+        
+        textureFiles = GetThisRecordMaster(dictIn, "TexturePalette")
+        tempDict = VertexListToComplexTextureCoordsMaster(dictIn)
+    else:
+        coordinates = VertexListToCoords(dictIn)
+        if modelName not in coordinates:
+            raise Exception("Unable to find model \"" + modelName + "\"")
+        
+        textureFiles = GetThisRecord(dictIn, "TexturePalette")[modelName]
+        tempDict = VertexListToComplexTextureCoords(dictIn)[modelName]
+        
+        # Simplify dictionary object
+        coordinates = coordinates[modelName]
     
     textureFilenames = [filen['Filename'].replace('\\', os.path.sep) for filen in textureFiles]
     textureIndices = [filen['TexturePatternIdx'] for filen in textureFiles]
     # Remove path and only have filename.
-    textureFilenames = [filen[filen.rindex(os.path.sep)+1:] for filen in textureFilenames]
-    
-    tempDict = VertexListToComplexTextureCoords(dictIn)[modelName]
+    tempList = []
+    for filen in textureFilenames:
+        if filen.count(os.path.sep) > 0:
+            tempList.append(filen[filen.rindex(os.path.sep)+1:])
+        else:
+            tempList.append(filen)
+    textureFilenames = tempList
     
     textureCoords = tempDict['Coords']
     
     texturePatternIdx = tempDict['TexturePattern']
-    
-    # Simplify dictionary object
-    coordinates = coordinates[modelName]
     
     HEADER = ["#ifndef SCENE_H_\n",
         "#define SCENE_H_\n",
