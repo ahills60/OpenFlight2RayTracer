@@ -209,13 +209,13 @@ def VertexListToCoordsMaster(dictIn):
     if 'VertexList' not in dictIn:
         raise Exception("Unable to find the vertex list.")
     
-    for item in dictIn['VertexList']:
+    for item, scale, translate in zip(dictIn['VertexList'], dictIn['Scale'], dictIn['Translate']):
         tempMat = None
         for idx, offset in enumerate(item):
             if tempMat is None:
                 tempMat = np.zeros((len(item), max(dictIn['Vertices'][offset]['Coordinate'].shape)))
             tempMat[idx, :] = dictIn['Vertices'][offset]['Coordinate']
-        tempList.append(tempMat)
+        tempList.append(tempMat * scale + translate)
     if len(tempList) > 0:
         newObject = np.vstack(tempList)
     return newObject
@@ -581,6 +581,8 @@ def VertexListToComplexTextureCoordsMaster(dictIn):
     tempList = []
     tempList2 = []
     
+    newObject = dict()
+    
     if 'VertexList' not in dictIn:
         raise Exception("Unable to find the vertex list.")
     
@@ -593,7 +595,6 @@ def VertexListToComplexTextureCoordsMaster(dictIn):
         tempList.append(tempMat)
         tempList2.append(np.ones((len(item), 1)) * txpidx)
     if len(tempList) > 0:
-        newObject = dict()
         newObject['Coords'] = np.vstack(tempList)
         newObject['TexturePattern'] = np.vstack(tempList2)
     return newObject
@@ -605,6 +606,7 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
         
         textureFiles = GetThisRecordMaster(dictIn, "TexturePalette")
         tempDict = VertexListToComplexTextureCoordsMaster(dictIn)
+        modelName = "Model"
     else:
         coordinates = VertexListToCoords(dictIn)
         if modelName not in coordinates:
@@ -620,23 +622,29 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
     textureIndices = [filen['TexturePatternIdx'] for filen in textureFiles]
     # Remove path and only have filename.
     tempList = []
+    isSGI = []
     for filen in textureFilenames:
+        # Note whether this is an SGI file
+        isSGI.append(filen[-3:].lower() == "rgb" or filen[-3:].lower == 'sgi')
+        # Remove path if it's there.
         if filen.count(os.path.sep) > 0:
             tempList.append(filen[filen.rindex(os.path.sep)+1:])
         else:
             tempList.append(filen)
+    
     textureFilenames = tempList
     
     textureCoords = tempDict['Coords']
     
-    texturePatternIdx = tempDict['TexturePattern']
+    texturePatternIdx = tempDict['TexturePattern'] - 1
     
     HEADER = ["#ifndef SCENE_H_\n",
         "#define SCENE_H_\n",
         "\n",
         "#include \"scenecalcs.h\"\n",
         "#include \"renderscene.h\"\n",
-        "#include <SOIL/SOIL.h>\n\n",
+        "#include <SOIL/SOIL.h>\n",
+        "#include \"texture.h\"\n\n",
         "// This script is for model \"" + str(modelName) + "\"\n",
         "\n",
         "// Called to draw scene\n",
@@ -691,23 +699,39 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
     outFile.write("glGenTextures(num_textures, texture_ids);\n")
     
     for idx, filen in enumerate(textureFilenames):
-        outFile.write("{\nint img_width, img_height, channels;\n")
-        outFile.write("GLenum format = GL_RGBA;\n")
-        outFile.write("glActiveTexture(GL_TEXTURE0 + " + str(idx) + ");\n",)
-        outFile.write("unsigned char* img = SOIL_load_image(\"" + filen + "\", &img_width, &img_height, &channels, SOIL_LOAD_AUTO);\n\n")
-        outFile.write("if(channels == 3)\n")
-        outFile.write("\tformat = GL_RGB;\n")
-        outFile.write("else\n{\n")
-        outFile.write("//printf(\"Channels: \%i\\n\", channels);\n")
-        outFile.write("\tglEnable(GL_BLEND);\n\tglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);\n}\n")
-        outFile.write("glEnable(GL_TEXTURE_2D);\n")
-        outFile.write("glBindTexture(GL_TEXTURE_2D, texture_ids[" + str(idx) + "]);\n")
-        # "//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);\n",
-        # "//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);\n",
-        # "//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);\n",
-        outFile.write("glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);\n")
-        outFile.write("glTexImage2D(GL_TEXTURE_2D, 0, channels, img_width, img_height, 0, format, GL_UNSIGNED_BYTE, img);\n")
-        outFile.write("SOIL_free_image_data(img);\n}\n")
+        if isSGI[idx]:
+            outFile.write("{\nint img_width, img_height, depth;\n")
+            outFile.write("GLenum format = GL_RGBA;\n")
+            outFile.write("glActiveTexture(GL_TEXTURE0 + " + str(idx) + ");\n",)
+            outFile.write("unsigned *img = read_texture(\"" + filen + "\", &img_width, &img_height, &depth);\n\n")
+            outFile.write("glEnable(GL_TEXTURE_2D);\n")
+            outFile.write("glBindTexture(GL_TEXTURE_2D, texture_ids[" + str(idx) + "]);\n")
+            outFile.write("glPixelStorei(GL_UNPACK_ALIGNMENT, 1);\n")
+            outFile.write("glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);\n")
+            outFile.write("glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);\n")
+            outFile.write("glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);\n")
+            outFile.write("glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);\n")
+            outFile.write("glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);\n")
+            outFile.write("glTexImage2D(GL_TEXTURE_2D, 0, 3, img_width, img_height, 0, format, GL_UNSIGNED_BYTE, (GLubyte *) img);\n")
+            outFile.write("free(img);\n}\n")
+        else:
+            outFile.write("{\nint img_width, img_height, channels;\n")
+            outFile.write("GLenum format = GL_RGBA;\n")
+            outFile.write("glActiveTexture(GL_TEXTURE0 + " + str(idx) + ");\n",)
+            outFile.write("unsigned char* img = SOIL_load_image(\"" + filen + "\", &img_width, &img_height, &channels, SOIL_LOAD_AUTO);\n\n")
+            outFile.write("if(channels == 3)\n")
+            outFile.write("\tformat = GL_RGB;\n")
+            outFile.write("else\n{\n")
+            outFile.write("//printf(\"Channels: \%i\\n\", channels);\n")
+            outFile.write("\tglEnable(GL_BLEND);\n\tglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);\n}\n")
+            outFile.write("glEnable(GL_TEXTURE_2D);\n")
+            outFile.write("glBindTexture(GL_TEXTURE_2D, texture_ids[" + str(idx) + "]);\n")
+            # "//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);\n",
+            # "//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);\n",
+            # "//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);\n",
+            outFile.write("glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);\n")
+            outFile.write("glTexImage2D(GL_TEXTURE_2D, 0, channels, img_width, img_height, 0, format, GL_UNSIGNED_BYTE, img);\n")
+            outFile.write("SOIL_free_image_data(img);\n}\n")
     
     outFile.writelines(HEADERCONT)
     
@@ -726,13 +750,24 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
         
         outFile.write("calcNormal(v, normal);\n")
         outFile.write("glBindTexture(GL_TEXTURE_2D, texture_ids[" + str(int(texturePatternIdx[idx, 0])) + "]);\n")
+        
         outFile.write("glNormal3fv(normal);\n")
-        outFile.write("glTexCoord2d(%ff, %ff);\n" % (textureCoords[idx, 0], 1-textureCoords[idx, 1]))
-        outFile.write("glVertex3fv(v[0]);\n")
-        outFile.write("glTexCoord2d(%ff, %ff);\n" % (textureCoords[idx+1, 0], 1-textureCoords[idx+1, 1]))
-        outFile.write("glVertex3fv(v[1]);\n")
-        outFile.write("glTexCoord2d(%ff, %ff);\n" % (textureCoords[idx+2, 0], 1-textureCoords[idx+2, 1]))
-        outFile.write("glVertex3fv(v[2]);\n")
+        if isSGI[int(texturePatternIdx[idx, 0])]:
+            # This is an SGI file and was opened with the SGI file container. Do not invert y.
+            outFile.write("glTexCoord2d(%ff, %ff);\n" % (textureCoords[idx, 0], textureCoords[idx, 1]))
+            outFile.write("glVertex3fv(v[0]);\n")
+            outFile.write("glTexCoord2d(%ff, %ff);\n" % (textureCoords[idx+1, 0], textureCoords[idx+1, 1]))
+            outFile.write("glVertex3fv(v[1]);\n")
+            outFile.write("glTexCoord2d(%ff, %ff);\n" % (textureCoords[idx+2, 0], textureCoords[idx+2, 1]))
+            outFile.write("glVertex3fv(v[2]);\n")        
+        else:
+            # This was opened with SOIL, so invert y.
+            outFile.write("glTexCoord2d(%ff, %ff);\n" % (textureCoords[idx, 0], 1-textureCoords[idx, 1]))
+            outFile.write("glVertex3fv(v[0]);\n")
+            outFile.write("glTexCoord2d(%ff, %ff);\n" % (textureCoords[idx+1, 0], 1-textureCoords[idx+1, 1]))
+            outFile.write("glVertex3fv(v[1]);\n")
+            outFile.write("glTexCoord2d(%ff, %ff);\n" % (textureCoords[idx+2, 0], 1-textureCoords[idx+2, 1]))
+            outFile.write("glVertex3fv(v[2]);\n")
     # Lastly, write footer
     outFile.writelines(FOOTER)
     outFile.close()
