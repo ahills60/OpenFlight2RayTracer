@@ -735,6 +735,8 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
     
     outFile.writelines(HEADERCONT)
     
+    print "Number of triangles: " + str(coordinates.shape[0] / 3) + "\n\n"
+    
     for idx in range(0, coordinates.shape[0], 3):
         if idx > 0:
             outFile.write('}\n\n')
