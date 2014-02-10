@@ -751,6 +751,7 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
         outFile.write("     {%ff, %ff, %ff}};\n" % (v1, v2, v3))
         
         outFile.write("calcNormal(v, normal);\n")
+        outFile.write("glActiveTexture(GL_TEXTURE0 + " + str(int(texturePatternIdx[idx, 0])) + ");\n")
         outFile.write("glBindTexture(GL_TEXTURE_2D, texture_ids[" + str(int(texturePatternIdx[idx, 0])) + "]);\n")
         
         outFile.write("glNormal3fv(normal);\n")
