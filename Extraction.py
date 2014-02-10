@@ -704,6 +704,7 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
             outFile.write("GLenum format = GL_RGBA;\n")
             outFile.write("glActiveTexture(GL_TEXTURE0 + " + str(idx) + ");\n",)
             outFile.write("unsigned *img = read_texture(\"" + filen + "\", &img_width, &img_height, &depth);\n\n")
+            outFile.write("glEnable(GL_BLEND);\nglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);\n\n")
             outFile.write("glEnable(GL_TEXTURE_2D);\n")
             outFile.write("glBindTexture(GL_TEXTURE_2D, texture_ids[" + str(idx) + "]);\n")
             outFile.write("glPixelStorei(GL_UNPACK_ALIGNMENT, 1);\n")
