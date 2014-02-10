@@ -636,7 +636,7 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
     
     textureCoords = tempDict['Coords']
     
-    texturePatternIdx = tempDict['TexturePattern'] - 1
+    texturePatternIdx = tempDict['TexturePattern'] - min(tempDict['TexturePattern'])
     
     HEADER = ["#ifndef SCENE_H_\n",
         "#define SCENE_H_\n",
