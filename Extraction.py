@@ -851,7 +851,7 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
         "\n",
         "// We've got what we needed after the hit, so return\n",
         "statSubtractFlt(m, 1);\n",
-        "return scalarVecMult(fp_fp1 - traceShadow(hit, scene, light, m, f), outputColour, m, f);\n",
+        "return scalarVecMult(fp_fp1 - traceShadow(hit, scene, light, lightDirection, m, f), outputColour, m, f);\n",
         "}\n",
         "\n",
         "// No hit, return black.\n",
