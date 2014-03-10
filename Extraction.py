@@ -776,7 +776,7 @@ def CreateComplexTextureHeaderFile(modelName, dictIn, filename = "scene.h", scal
     outFile.writelines(FOOTER)
     outFile.close()
 
-def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.h", scale = 5):
+def CreateComplexRTHeaderFile(modelName, dictIn, filename = "OFconstruct.h", scale = 5):
     if modelName is None:
         coordinates = VertexListToCoordsMaster(dictIn)
         modelName = "Model"
@@ -870,7 +870,7 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     
     outFile.write("Object myObj;\nMaterial myMat;\nVector red = int2Vector(RED);\n")
     outFile.write("Vector u, v, w;\n\n")
-    outFile.write("setMaterial(&myMat, lightSrc, red, fp_Flt2FP(0.0), fp_Flt2FP(0.5), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.8), fp_Flt2FP(1.4), f);\n");
+    outFile.write("setMaterial(&myMat, lightSrc, red, fp_Flt2FP(0.0), fp_Flt2FP(0.5), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.8), fp_Flt2FP(1.4), -1, f);\n");
     outFile.write("Triangle *triangle;\n")
     outFile.write("triangle = (Triangle *)malloc(sizeof(Triangle) * " + str(noTriangles) + ");\n")
     outFile.write("// Now begin object writing\n\n")
@@ -893,6 +893,141 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     outFile.write("transformObject(&myObj, matMult(genTransMatrix(fp_Flt2FP(1.), fp_Flt2FP(-5.), -fp_Flt2FP(30.), m, f), genZRotateMat(-fp_Flt2FP(20.), m, f), m, f), m, f);\n")
     outFile.write("initialiseScene(scene, 1, f);\n")
     outFile.write("addObject(scene, myObj, f);\n")
+    
+    outFile.write("}\n\n")
+    # Lastly, write footer
+    outFile.writelines(FOOTER)
+    outFile.close()
+
+def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.h", scale = 5):
+    if modelName is None:
+        coordinates = VertexListToCoordsMaster(dictIn)
+        modelName = "Model"
+        tempDict = VertexListToComplexTextureCoordsMaster(dictIn)
+    else:
+        coordinates = VertexListToCoords(dictIn)
+        if modelName not in coordinates:
+            raise Exception("Unable to find model \"" + modelName + "\"")
+        
+        tempDict = VertexListToComplexTextureCoords(dictIn)[modelName]
+        
+        # Simplify dictionary object
+        coordinates = coordinates[modelName]
+    
+    textureCoords = tempDict['Coords']
+    
+    HEADER = ["#ifndef OFCONSTRUCT_H_\n",
+        "#define OFCONSTRUCT_H_\n",
+        "\n",
+        "#include \"fpmath.h\"\n",
+        "#include \"craytracer.h\"\n",
+        "#include \"datatypes.h\"\n",
+        "#include \"rays.h\"\n",
+        "#include \"image.h\"\n",
+        "#include \"lighting.h\"\n",
+        "#include \"objects.h\"\n",
+        "#include \"colours.h\"\n",
+        "#include \"shapes.h\"\n",
+        "#include \"mathstats.h\"\n",
+        "#include \"funcstats.h\"\n",
+        "#include \"textures.h\"\n\n",
+        "// This script is for model \"" + str(modelName) + "\"\n\n",
+        "Texture Textures[1];\n"
+        "\n",
+        "// Put the object(s) on the scene\n",
+        "void populateScene(Scene *scene, Light lightSrc, MathStat *m, FuncStat *f)\n",
+        "{\n",
+        "    //fixedp normal[3];\t// Storage for calculated surface normal\n",
+        "    \n"]
+    
+    FOOTER = ["Vector draw(Ray ray, Scene scene, Light light, int recursion, MathStat *m, FuncStat *f)\n",
+        "{\n",
+        "    Hit hit;\n",
+        "    Vector outputColour, reflectiveColour, refractiveColour;\n",
+        "    fixedp reflection, refraction;\n",
+        "    \n",
+        "    (*f).draw++;\n",
+        "    \n",
+        "    // Default is black. We can add to this (if there's a hit) \n",
+        "    // or just return it (if there's no object)\n",
+        "    setVector(&outputColour, 0, 0, 0, f);\n",
+        "    \n",
+        "    hit = sceneIntersection(ray, scene, m, f);\n",
+        "    \n",
+        "    // Determine whether there was a hit. Otherwise default.\n",
+        "    if (hit.objectIndex >= 0)\n",
+        "    {\n",
+        "        // There was a hit.\n",
+        "        Vector lightDirection = vecNormalised(vecSub(light.location, hit.location, m, f), m, f);\n",
+        "        // outputColour = vecAdd(ambiance(hit, scene, light, m, f), diffusion(hit, scene, light, m, f), m, f);\n",
+        "        outputColour = vecAdd(ambiance(hit, scene, light, m, f), vecAdd(diffusion(hit, scene, light, lightDirection, m, f), specular(hit, scene, light, lightDirection, m, f), m, f), m, f);\n",
+        "        \n",
+        "        // Should we go deeper?\n",
+        "        if (recursion > 0)\n",
+        "        {\n",
+        "            // Yes, we should\n",
+        "            // Get the reflection\n",
+        "            reflectiveColour = draw(reflectRay(hit, m, f), scene, light, recursion - 1, m, f);\n",
+        "            statSubtractInt(m, 1);\n",
+        "            reflection = scene.object[hit.objectIndex].material.reflectivity;\n",
+        "            outputColour = vecAdd(outputColour, scalarVecMult(reflection, reflectiveColour, m, f), m, f);\n",
+        "            \n",
+        "            // Get the refraction\n",
+        "            refractiveColour = draw(refractRay(hit, scene.object[hit.objectIndex].material.inverserefractivity, scene.object[hit.objectIndex].material.squareinverserefractivity, m, f), scene, light, recursion - 1, m, f);\n",
+        "            statSubtractInt(m, 1);\n",
+        "            refraction = scene.object[hit.objectIndex].material.opacity;\n",
+        "            outputColour = vecAdd(outputColour, scalarVecMult(refraction, refractiveColour, m, f), m, f);\n",
+        "        }\n",
+        "        \n",
+        "        // We've got what we needed after the hit, so return\n",
+        "        statSubtractFlt(m, 1);\n",
+        "        return scalarVecMult(fp_fp1 - traceShadow(hit, scene, light, lightDirection, m, f), outputColour, m, f);\n",
+        "    }\n",
+        "    \n",
+        "    // No hit, return black.\n",
+        "    \n",
+        "    return outputColour;\n",
+        "}\n",
+        "\n",
+        "#endif\n"]
+    
+    outFile = open(filename, 'w')
+    outFile.writelines(HEADER)
+    
+    noTriangles = coordinates.shape[0] / 3
+    
+    print "Number of triangles: " + str(noTriangles) + "\n\n"
+    
+    outFile.write("    Object myObj;\n    Material myMat;\n    Vector red = int2Vector(RED);\n")
+    outFile.write("    Vector u, v, w;\n\n")
+    outFile.write("    UVCoord uUV, vUV, wUV;\n\n")
+    outFile.write("    ReadTexture(&texture,\"" + "texture.tga" + "\", f);\n")
+    outFile.write("    setMaterial(&myMat, lightSrc, red, fp_Flt2FP(0.0), fp_Flt2FP(0.5), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.8), fp_Flt2FP(1.4), 0, f);\n");
+    outFile.write("    Triangle *triangle;\n")
+    outFile.write("    triangle = (Triangle *)malloc(sizeof(Triangle) * " + str(noTriangles) + ");\n")
+    outFile.write("    // Now begin object writing\n\n")
+    
+    for idx in range(0, coordinates.shape[0], 3):
+        outFile.write("    // Triangle " + str(idx / 3) + ":\n\n")
+        
+        v1, v2, v3 = scale * coordinates[idx, :]
+        outFile.write("    setVector(&u, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
+        outFile.write("    setUVCoord(&uUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (textureCoords[idx, 0], textureCoords[idx, 1]))
+        
+        v1, v2, v3 = scale * coordinates[idx + 1, :]
+        outFile.write("    setVector(&v, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
+        outFile.write("    setUVCoord(&vUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (textureCoords[idx + 1, 0], textureCoords[idx + 1, 1]))
+        
+        v1, v2, v3 = scale * coordinates[idx + 2, :]
+        outFile.write("    setVector(&w, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
+        outFile.write("    setUVCoord(&wUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (textureCoords[idx + 2, 0], textureCoords[idx + 2, 1]))
+        
+        outFile.write("    setUVTriangle(&triangle[" + str(idx / 3) + "], u, v, w, uUV, vUV, wUV, m, f);\n\n")
+    
+    outFile.write("    setObject(&myObj, myMat, " + str(noTriangles) + ", triangle, f);\n")
+    outFile.write("    transformObject(&myObj, matMult(genTransMatrix(fp_Flt2FP(1.), fp_Flt2FP(-5.), -fp_Flt2FP(15.), m, f), matMult(genYRotateMat(fp_Flt2FP(160.), m, f), genXRotateMat(fp_Flt2FP(-90.), m, f), m, f), m, f), m, f);\n")
+    outFile.write("    initialiseScene(scene, 1, f);\n")
+    outFile.write("    addObject(scene, myObj, f);\n")
     
     outFile.write("}\n\n")
     # Lastly, write footer
