@@ -943,7 +943,7 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     FOOTER = ["Vector draw(Ray ray, Scene scene, Light light, int recursion, MathStat *m, FuncStat *f)\n",
         "{\n",
         "    Hit hit;\n",
-        "    Vector outputColour, reflectiveColour, refractiveColour;\n",
+        "    Vector outputColour, reflectiveColour, refractiveColour, textureColour;\n",
         "    fixedp reflection, refraction;\n",
         "    \n",
         "    (*f).draw++;\n",
@@ -959,8 +959,14 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
         "    {\n",
         "        // There was a hit.\n",
         "        Vector lightDirection = vecNormalised(vecSub(light.location, hit.location, m, f), m, f);\n",
+        "        \n",
+        "        // Determine whether this has a texture or not\n",
+        "        if (scene.object[hit.objectIndex].material.textureIdx < 0)\n",
+        "            setVector(&textureColour, -1, -1, -1, f);\n",
+        "        else\n",
+        "            textureColour = getColour(Textures[scene.object[hit.objectIndex].material.textureIdx], scene, hit, m, f);\n\n",
         "        // outputColour = vecAdd(ambiance(hit, scene, light, m, f), diffusion(hit, scene, light, m, f), m, f);\n",
-        "        outputColour = vecAdd(ambiance(hit, scene, light, m, f), vecAdd(diffusion(hit, scene, light, lightDirection, m, f), specular(hit, scene, light, lightDirection, m, f), m, f), m, f);\n",
+        "        outputColour = vecAdd(ambiance(hit, scene, light, textureColour, m, f), vecAdd(diffusion(hit, scene, light, lightDirection, textureColour, m, f), specular(hit, scene, light, lightDirection, textureColour, m, f), m, f), m, f);\n",
         "        \n",
         "        // Should we go deeper?\n",
         "        if (recursion > 0)\n",
@@ -1001,8 +1007,8 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     outFile.write("    Object myObj;\n    Material myMat;\n    Vector red = int2Vector(RED);\n")
     outFile.write("    Vector u, v, w;\n\n")
     outFile.write("    UVCoord uUV, vUV, wUV;\n\n")
-    outFile.write("    ReadTexture(&texture,\"" + "texture.tga" + "\", f);\n")
-    outFile.write("    setMaterial(&myMat, lightSrc, red, fp_Flt2FP(0.0), fp_Flt2FP(0.5), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.8), fp_Flt2FP(1.4), 0, f);\n");
+    outFile.write("    ReadTexture(&Textures[0],\"" + "texture.tga" + "\", f);\n")
+    outFile.write("    setMaterial(&myMat, lightSrc, red, fp_Flt2FP(0.0), fp_Flt2FP(0.5), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.8), fp_Flt2FP(1.4), 0, m, f);\n");
     outFile.write("    Triangle *triangle;\n")
     outFile.write("    triangle = (Triangle *)malloc(sizeof(Triangle) * " + str(noTriangles) + ");\n")
     outFile.write("    // Now begin object writing\n\n")
@@ -1012,15 +1018,15 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
         
         v1, v2, v3 = scale * coordinates[idx, :]
         outFile.write("    setVector(&u, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
-        outFile.write("    setUVCoord(&uUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (textureCoords[idx, 0], textureCoords[idx, 1]))
+        outFile.write("    setUVCoord(&uUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (textureCoords[idx, 0], textureCoords[idx, 1]))
         
         v1, v2, v3 = scale * coordinates[idx + 1, :]
         outFile.write("    setVector(&v, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
-        outFile.write("    setUVCoord(&vUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (textureCoords[idx + 1, 0], textureCoords[idx + 1, 1]))
+        outFile.write("    setUVCoord(&vUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (textureCoords[idx + 1, 0], textureCoords[idx + 1, 1]))
         
         v1, v2, v3 = scale * coordinates[idx + 2, :]
         outFile.write("    setVector(&w, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
-        outFile.write("    setUVCoord(&wUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (textureCoords[idx + 2, 0], textureCoords[idx + 2, 1]))
+        outFile.write("    setUVCoord(&wUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (textureCoords[idx + 2, 0], textureCoords[idx + 2, 1]))
         
         outFile.write("    setUVTriangle(&triangle[" + str(idx / 3) + "], u, v, w, uUV, vUV, wUV, m, f);\n\n")
     
