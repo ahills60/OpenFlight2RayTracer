@@ -1014,7 +1014,7 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     outFile.write("    Vector u, v, w;\n\n")
     outFile.write("    UVCoord uUV, vUV, wUV;\n\n")
     outFile.write("    ReadTexture(&Textures[0],\"" + "texture.tga" + "\", f);\n")
-    outFile.write("    setMaterial(&myMat, lightSrc, red, fp_Flt2FP(0.0), fp_Flt2FP(0.5), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.8), fp_Flt2FP(1.4), 0, m, f);\n");
+    outFile.write("    setMaterial(&myMat, lightSrc, red, fp_Flt2FP(1.0), fp_Flt2FP(0.5), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.8), fp_Flt2FP(1.4), 0, m, f);\n");
     outFile.write("    Triangle *triangle;\n")
     outFile.write("    triangle = (Triangle *)malloc(sizeof(Triangle) * " + str(noTriangles) + ");\n")
     outFile.write("    // Now begin object writing\n\n")
