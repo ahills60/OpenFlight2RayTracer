@@ -1040,7 +1040,7 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     outFile.write("    initialiseScene(scene, " + str(len(textureFilenames)) + ", f);\n")
     outFile.write("    Triangle *triangle;\n")
     for textIdx, fn in enumerate(textureFilenames):
-        outFile.write("    ReadTexture(&Textures[" + str(textIdx) + "],\"" + fn + "\", f);\n")
+        outFile.write("    ReadTexture(&Textures[" + str(textIdx) + "],\"" + fn[:-3] + "tga\", f);\n")
         outFile.write("    setMaterial(&myMat[" + str(textIdx) + "], lightSrc, lgrey, fp_Flt2FP(1.0), 0, fp_Flt2FP(0.1), fp_Flt2FP(0.5), fp_Flt2FP(0.2), 0, fp_Flt2FP(1.4), " + str(textIdx) + ", m, f);\n")
         
         # Now retrieve the appropriate data for this texture.
