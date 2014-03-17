@@ -909,6 +909,7 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     if modelName is None:
         coordinates = VertexListToCoordsMaster(dictIn)
         modelName = "Model"
+        textureFiles = GetThisRecordMaster(dictIn, "TexturePalette")
         tempDict = VertexListToComplexTextureCoordsMaster(dictIn)
     else:
         coordinates = VertexListToCoords(dictIn)
@@ -917,10 +918,27 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
         
         tempDict = VertexListToComplexTextureCoords(dictIn)[modelName]
         
+        textureFiles = GetThisRecord(dictIn, "TexturePalette")[modelName]
+        
         # Simplify dictionary object
         coordinates = coordinates[modelName]
     
+    textureFilenames = [filen['Filename'].replace('\\', os.path.sep) for filen in textureFiles]
+    textureIndices = [filen['TexturePatternIdx'] for filen in textureFiles]
+    # Remove path and only have filename.
+    tempList = []
+    for filen in textureFilenames:
+        # Remove path if it's there.
+        if filen.count(os.path.sep) > 0:
+            tempList.append(filen[filen.rindex(os.path.sep)+1:])
+        else:
+            tempList.append(filen)
+    
+    textureFilenames = tempList
+    
     textureCoords = tempDict['Coords']
+    
+    texturePatternIdx = tempDict['TexturePattern'] - min(tempDict['TexturePattern'])
     
     HEADER = ["#ifndef OFCONSTRUCT_H_\n",
         "#define OFCONSTRUCT_H_\n",
@@ -938,7 +956,7 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
         "#include \"funcstats.h\"\n",
         "#include \"textures.h\"\n\n",
         "// This script is for model \"" + str(modelName) + "\"\n\n",
-        "Texture Textures[1];\n"
+        "Texture Textures[" + str(len(textureFilenames)) + "];\n"
         "\n",
         "// Put the object(s) on the scene\n",
         "void populateScene(Scene *scene, Light lightSrc, MathStat *m, FuncStat *f)\n",
@@ -1006,40 +1024,58 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     outFile = open(filename, 'w')
     outFile.writelines(HEADER)
     
+    # Scale coordinates all at once:
+    coordinates *= scale
+    
     noTriangles = coordinates.shape[0] / 3
     
     print "Number of triangles: " + str(noTriangles) + "\n\n"
+    print "Number of textures: " + str(len(textureFilenames)) + "\n\n"
     
-    outFile.write("    Object myObj;\n    Material myMat;\n    Vector red = int2Vector(RED);\n")
+    outFile.write("    Object myObj;\n")
+    outFile.write("    Material myMat[" + str(len(textureFilenames)) + "];\n")
+    outFile.write("    Vector lgrey = int2Vector(LIGHT_GREY);\n")
     outFile.write("    Vector u, v, w;\n\n")
     outFile.write("    UVCoord uUV, vUV, wUV;\n\n")
-    outFile.write("    ReadTexture(&Textures[0],\"" + "texture.tga" + "\", f);\n")
-    outFile.write("    setMaterial(&myMat, lightSrc, red, fp_Flt2FP(1.0), fp_Flt2FP(0.5), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.0), fp_Flt2FP(0.8), fp_Flt2FP(1.4), 0, m, f);\n");
+    outFile.write("    initialiseScene(scene, " + str(len(textureFilenames)) + ", f);\n")
     outFile.write("    Triangle *triangle;\n")
-    outFile.write("    triangle = (Triangle *)malloc(sizeof(Triangle) * " + str(noTriangles) + ");\n")
-    outFile.write("    // Now begin object writing\n\n")
+    for textIdx, fn in enumerate(textureFilenames):
+        outFile.write("    ReadTexture(&Textures[" + str(textIdx) + "],\"" + fn + "\", f);\n")
+        outFile.write("    setMaterial(&myMat[" + str(textIdx) + "], lightSrc, lgrey, fp_Flt2FP(1.0), 0, fp_Flt2FP(0.1), fp_Flt2FP(0.5), fp_Flt2FP(0.2), 0, fp_Flt2FP(1.4), " + str(textIdx) + ", m, f);\n")
+        
+        # Now retrieve the appropriate data for this texture.
+        theseCoordinates = coordinates[texturePatternIdx.flatten() == textIdx, :]
+        
+        # Get the number of triangles in this group:
+        noTrianglesSubset = theseCoordinates.shape[0] / 3
+        
+        # Get the subset for texture coordinates:
+        theseTextureCoords = textureCoords[texturePatternIdx.flatten() == textIdx, :]
+        
+        outFile.write("    // Texture " + str(textIdx) + "\n\n")
+        outFile.write("    triangle = (Triangle *)malloc(sizeof(Triangle) * " + str(noTrianglesSubset) + ");\n")
+        outFile.write("    // Now begin object writing\n\n")
     
-    for idx in range(0, coordinates.shape[0], 3):
-        outFile.write("    // Triangle " + str(idx / 3) + ":\n\n")
+        for idx in range(0, theseCoordinates.shape[0], 3):
+            outFile.write("    // Triangle " + str(idx / 3) + ":\n\n")
         
-        v1, v2, v3 = scale * coordinates[idx, :]
-        outFile.write("    setVector(&u, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
-        outFile.write("    setUVCoord(&uUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (textureCoords[idx, 0], textureCoords[idx, 1]))
+            v1, v2, v3 = theseCoordinates[idx, :]
+            outFile.write("    setVector(&u, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
+            outFile.write("    setUVCoord(&uUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (theseTextureCoords[idx, 0], theseTextureCoords[idx, 1]))
         
-        v1, v2, v3 = scale * coordinates[idx + 1, :]
-        outFile.write("    setVector(&v, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
-        outFile.write("    setUVCoord(&vUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (textureCoords[idx + 1, 0], textureCoords[idx + 1, 1]))
+            v1, v2, v3 = theseCoordinates[idx + 1, :]
+            outFile.write("    setVector(&v, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
+            outFile.write("    setUVCoord(&vUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (theseTextureCoords[idx + 1, 0], theseTextureCoords[idx + 1, 1]))
         
-        v1, v2, v3 = scale * coordinates[idx + 2, :]
-        outFile.write("    setVector(&w, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
-        outFile.write("    setUVCoord(&wUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (textureCoords[idx + 2, 0], textureCoords[idx + 2, 1]))
+            v1, v2, v3 = theseCoordinates[idx + 2, :]
+            outFile.write("    setVector(&w, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
+            outFile.write("    setUVCoord(&wUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (theseTextureCoords[idx + 2, 0], theseTextureCoords[idx + 2, 1]))
         
-        outFile.write("    setUVTriangle(&triangle[" + str(idx / 3) + "], u, v, w, uUV, vUV, wUV, m, f);\n\n")
+            outFile.write("    setUVTriangle(&triangle[" + str(idx / 3) + "], u, v, w, uUV, vUV, wUV, m, f);\n\n")
     
-    outFile.write("    setObject(&myObj, myMat, " + str(noTriangles) + ", triangle, f);\n")
-    outFile.write("    transformObject(&myObj, matMult(genTransMatrix(fp_Flt2FP(1.), fp_Flt2FP(-5.), -fp_Flt2FP(15.), m, f), matMult(genYRotateMat(fp_Flt2FP(160.), m, f), genXRotateMat(fp_Flt2FP(-90.), m, f), m, f), m, f), m, f);\n")
-    outFile.write("    initialiseScene(scene, 1, f);\n")
-    outFile.write("    addObject(scene, myObj, f);\n")
+        outFile.write("    setObject(&myObj, myMat[" + str(textIdx) + "], " + str(noTrianglesSubset) + ", triangle, f);\n")
+        outFile.write("    transformObject(&myObj, matMult(genTransMatrix(fp_Flt2FP(1.), fp_Flt2FP(-5.), -fp_Flt2FP(15.), m, f), matMult(genYRotateMat(fp_Flt2FP(160.), m, f), genXRotateMat(fp_Flt2FP(-90.), m, f), m, f), m, f), m, f);\n")
+        outFile.write("    addObject(scene, myObj, f);\n")
     
     outFile.write("}\n\n")
     # Lastly, write footer
