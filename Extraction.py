@@ -936,6 +936,12 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     
     textureFilenames = tempList
     
+    # Now obtain unique filenames
+    uniqueTextureFilenames = []
+    for filen in textureFilenames:
+        if filen not in uniqueTextureFilenames:
+            uniqueTextureFilenames.append(filen)
+    
     textureCoords = tempDict['Coords']
     
     texturePatternIdx = tempDict['TexturePattern'] - min(tempDict['TexturePattern'])
@@ -956,7 +962,7 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
         "#include \"funcstats.h\"\n",
         "#include \"textures.h\"\n\n",
         "// This script is for model \"" + str(modelName) + "\"\n\n",
-        "Texture Textures[" + str(len(textureFilenames)) + "];\n"
+        "Texture Textures[" + str(len(uniqueTextureFilenames)) + "];\n"
         "\n",
         "// Put the object(s) on the scene\n",
         "void populateScene(Scene *scene, Light lightSrc, MathStat *m, FuncStat *f)\n",
@@ -1039,9 +1045,12 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     outFile.write("    UVCoord uUV, vUV, wUV;\n\n")
     outFile.write("    initialiseScene(scene, " + str(len(textureFilenames)) + ", f);\n")
     outFile.write("    Triangle *triangle;\n")
-    for textIdx, fn in enumerate(textureFilenames):
+    # Import unique textures first:
+    for textIdx, fn in enumerate(uniqueTextureFilenames):
         outFile.write("    ReadTexture(&Textures[" + str(textIdx) + "],\"" + fn[:-3] + "tga\", f);\n")
-        outFile.write("    setMaterial(&myMat[" + str(textIdx) + "], lightSrc, lgrey, fp_Flt2FP(1.0), 0, fp_Flt2FP(0.1), fp_Flt2FP(0.5), fp_Flt2FP(0.2), 0, fp_Flt2FP(1.4), " + str(textIdx) + ", m, f);\n")
+    # Now import materials and look up the appropriate texture based on the filename
+    for textIdx, fn in enumerate(textureFilenames):
+        outFile.write("    setMaterial(&myMat[" + str(textIdx) + "], lightSrc, lgrey, fp_Flt2FP(1.0), 0, fp_Flt2FP(0.1), fp_Flt2FP(0.5), fp_Flt2FP(0.2), 0, fp_Flt2FP(1.4), " + str(uniqueTextureFilenames.index(fn)) + ", m, f);\n")
         
         # Now retrieve the appropriate data for this texture.
         theseCoordinates = coordinates[texturePatternIdx.flatten() == textIdx, :]
