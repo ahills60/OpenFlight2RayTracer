@@ -183,13 +183,13 @@ def VertexListToCoords(dictIn):
         if 'VertexList' not in dictIn['External'][key]:
             continue
         
-        for item in dictIn['External'][key]['VertexList']:
+        for item, scale, translate in zip(dictIn['External'][key]['VertexList'], dictIn['External'][key]['Scale'], dictIn['External'][key]['Translate']):
             tempMat = None
             for idx, offset in enumerate(item):
                 if tempMat is None:
                     tempMat = np.zeros((len(item), max(dictIn['External'][key]['Vertices'][offset]['Coordinate'].shape)))
                 tempMat[idx, :] = dictIn['External'][key]['Vertices'][offset]['Coordinate']
-            tempList.append(tempMat)
+            tempList.append(tempMat * scale + translate)
         if len(tempList) > 0:
             newObject[key[key.rindex(os.path.sep)+1:key.rindex('.')]] = np.vstack(tempList)
     return newObject
