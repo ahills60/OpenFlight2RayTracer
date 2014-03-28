@@ -1090,3 +1090,384 @@ def CreateComplexTextureRTHeaderFile(modelName, dictIn, filename = "OFconstruct.
     # Lastly, write footer
     outFile.writelines(FOOTER)
     outFile.close()
+
+
+def CreateWorldHeaderFile(dictIn, filename = "OFconstruct.h"):
+    """
+    CreateWorldHeaderFile imports the contents of a dictionary object which may link to
+    multiple models. This function collates this information and saves it to a C header
+    file which can be imported directly into the ray tracer.
+    
+    """
+    
+    # Let's go on the initial assumption that this record consists of external records
+    # which need to be called and each external record may be subjected to a matrix
+    # transformation which occurs after the external record is declared.
+    # This requires us to navigate through the record list and pull out relevant records
+    # and substituting external records for the "External" equivalent, translating or
+    # transforming those coordinates as defined by a possible matrix after the record.
+    
+    
+    def ExpandSearch(listObject):
+        FocussedRecordsList = []
+        TempList = []
+        for item in listObject:
+            if isinstance(item, list):
+                FocussedRecordsList.extend(ExpandSearch(item))
+            # Not a list, so we must have a record.
+            elif isinstance(item, dict):
+                # Yes, this is a record.
+                if 'Datatype' not in item:
+                    continue
+                if item['Datatype'] != "ExternalReference":
+                    continue
+                # This record is appropriate
+                if len(TempList) > 2:
+                    FocussedRecordsList.append(tuple(TempList))
+                    TempList = []
+                if len(TempList) == 1:
+                    # An item is already on the stack. Check to see if it was a dict
+                    if isinstance(TempList[0], dict):
+                        # We should append without a matrix record. Insert a None instead
+                        TempList.append(None)
+                        FocussedRecordsList.append(tuple(TempList))
+                        TempList = []
+                        continue
+                    elif isinstance(TempList[0], np.ndarray):
+                        # Things look to be reversed. Insert this before the matrix
+                        TempList.insert(0, item)
+                        continue
+                # If here, we should append this item
+                TempList.append(item)
+            elif isinstance(item, np.ndarray):
+                # This is a matrix record
+                if len(TempList) > 2:
+                    FocussedRecordsList.append(tuple(TempList))
+                    TempList = []
+                if len(TempList) == 1:
+                    # An item is already on the stack. Check to see if it was a dict
+                    if isinstance(TempList[0], np.ndarray):
+                        # A matrix followed by a matrix is unusual. Remove the previous one
+                        TempList = [item]
+                        continue
+                # If here, it's safe to append the item
+                TempList.append(item)
+        return FocussedRecordsList
+    
+    # The following function is essentially a copy of the previous VertexListToComplexTextureCoords
+    # function but this one doesn't rename the output.
+    def GetTextureCoords(dictIn):
+        """
+            The input to this function should be the complete records dictionary.
+        
+            This function outputs a dictionary of NumPy coordinates.
+        """
+        if not isinstance(dictIn, dict):
+            raise Exception('Input it not a dictionary object.')
+        
+        if 'External' not in dictIn:
+            raise Exception('input is not a valid dictionary object.')
+        
+        newObject = dict()
+        
+        # This is similar to the ExtractExternal function.
+        for key in dictIn['External']:
+            tempList = []
+            tempList2 = []
+            
+            if 'VertexList' not in dictIn['External'][key]:
+                continue
+            
+            for item, txpidx in zip(dictIn['External'][key]['VertexList'], dictIn['External'][key]['TexturePatterns']):
+                tempMat = None
+                for idx, offset in enumerate(item):
+                    if tempMat is None:
+                        tempMat = np.zeros((len(item), max(dictIn['External'][key]['Vertices'][offset]['TextureCoordinate'].shape)))
+                    tempMat[idx, :] = dictIn['External'][key]['Vertices'][offset]['TextureCoordinate']
+                tempList.append(tempMat)
+                tempList2.append(np.ones((len(item), 1)) * txpidx)
+            if len(tempList) > 0:
+                newObject[key] = dict()
+                newObject[key]['Coords'] = np.vstack(tempList)
+                newObject[key]['TexturePattern'] = np.vstack(tempList2)
+        return newObject
+    
+    # Similarly, this is a copy of the previously seen VertexListToCoords function but also
+    # doesn't rename the key.
+    def GetCoords(dictIn):
+        """
+            The input to this function should be the complete records dictionary.
+        
+            This function outputs a dictionary of NumPy coordinates.
+        """
+        if not isinstance(dictIn, dict):
+            raise Exception('Input it not a dictionary object.')
+            
+        if 'External' not in dictIn:
+            raise Exception('input is not a valid dictionary object.')
+        
+        newObject = dict()
+        
+        # This is similar to the ExtractExternal function.
+        for key in dictIn['External']:
+            tempList = []
+            
+            if 'VertexList' not in dictIn['External'][key]:
+                continue
+            
+            for item, scale, translate in zip(dictIn['External'][key]['VertexList'], dictIn['External'][key]['Scale'], dictIn['External'][key]['Translate']):
+                tempMat = None
+                for idx, offset in enumerate(item):
+                    if tempMat is None:
+                        tempMat = np.zeros((len(item), max(dictIn['External'][key]['Vertices'][offset]['Coordinate'].shape)))
+                    tempMat[idx, :] = dictIn['External'][key]['Vertices'][offset]['Coordinate']
+                tempList.append(tempMat * scale + translate)
+            if len(tempList) > 0:
+                newObject[key] = np.vstack(tempList)
+        return newObject
+    ###########################################################
+    # Now back to the main function:
+    
+    # Obtain a list of models and their transformation matrices
+    RecordsList = ExpandSearch(dictIn['Tree'])
+    
+    TransformationList = dict()
+    
+    # Declare some primary lists
+    PrimaryTextureFiles = []
+    PrimaryModelFiles = []
+    
+    # Populate the list by expanding the records. These filenames can be used to
+    # open the files in the External list
+    for item in RecordsList:
+        if item[0]['NewFilename'] not in TransformationList:
+            TransformationList[item[0]['NewFilename']] = []
+        TransformationList[item[0]['NewFilename']].append(item[1])
+        if item[0]['NewFilename'] not in PrimaryModelFiles:
+            PrimaryModelFiles.append(item[0]['NewFilename'])
+    
+    # Now remove files with the flt texension and assume that these are texture files:
+    for item in dictIn['External']:
+        if item[-4:] != ".flt":
+            PrimaryTextureFiles.append(item)
+    
+    textureDB = dict()
+    materialDB = dict()
+    currIdx = 0
+    # Now for the fun part. We've got to construct a dictionary for each model file
+    # that maps its texture files to the appropriate primary texture. Additionally,
+    # there needs to be a counter to map the texture file. Let's also go through
+    # each texture and create an additional object which relates to the appropriate
+    # material index.
+    for modelPath in PrimaryModelFiles:
+        model = dictIn['External'][modelPath]
+        textureDB[modelPath] = []
+        materialDB[modelPath] = range(currIdx, currIdx + len(model['Textures']))
+        currIdx += len(model['Textures'])
+        for textureRecord in model['Textures']:
+            # Each of these records seem to be in sequential order. Thus, we can
+            # assume that a list object will be sufficient in translating the 
+            # texture pattern index to the appropriate texture. Thus, we simply
+            # couple the texture index with the primary texture index.
+            textureDB[modelPath].append(PrimaryTextureFiles.index(textureRecord['Filename']))
+    # And we can then get this useful stat.
+    numberOfMaterials = currIdx + 1
+    
+    # Now let's go through the primary texture files and correct the file separators
+    # and remove the path. This requires us to go through the primary list and alter
+    # wherever necessary
+    PrimaryTextureFilenames = []
+    for filen in PrimaryTextureFiles:
+        filen.replace('\\', os.path.sep)
+        if filen.count(os.path.sep) > 0:
+            PrimaryTextureFilenames.append(filen[filen.rindex(os.path.sep)+1:])
+        else:
+            PrimaryTextureFilenames.append(filen)
+    # And now we have corrected the texture filenames
+    
+    # So now let's get the coordinates for all the models in a nice dictionary form:
+    coordinates = GetCoords(dictIn)
+    textureCoordinates = GetTextureCoords(dictIn)
+    
+    # Let's start by opening the output file and adding the header. 
+    
+    
+    
+    # if modelName is None:
+    #     coordinates = VertexListToCoordsMaster(dictIn)
+    #     modelName = "Model"
+    #     textureFiles = GetThisRecordMaster(dictIn, "TexturePalette")
+    #     tempDict = VertexListToComplexTextureCoordsMaster(dictIn)
+    # else:
+    #     coordinates = VertexListToCoords(dictIn)
+    #     if modelName not in coordinates:
+    #         raise Exception("Unable to find model \"" + modelName + "\"")
+    #     
+    #     tempDict = VertexListToComplexTextureCoords(dictIn)[modelName]
+    #     
+    #     textureFiles = GetThisRecord(dictIn, "TexturePalette")[modelName]
+    #     
+    #     # Simplify dictionary object
+    #     coordinates = coordinates[modelName]
+    #
+    # texturePatternIdx = tempDict['TexturePattern'] - min(tempDict['TexturePattern'])
+    
+    HEADER = ["#ifndef OFCONSTRUCT_H_\n",
+        "#define OFCONSTRUCT_H_\n",
+        "\n",
+        "#include \"fpmath.h\"\n",
+        "#include \"craytracer.h\"\n",
+        "#include \"datatypes.h\"\n",
+        "#include \"rays.h\"\n",
+        "#include \"image.h\"\n",
+        "#include \"lighting.h\"\n",
+        "#include \"objects.h\"\n",
+        "#include \"colours.h\"\n",
+        "#include \"shapes.h\"\n",
+        "#include \"mathstats.h\"\n",
+        "#include \"funcstats.h\"\n",
+        "#include \"textures.h\"\n\n",
+        "// This script is for an entire scene.\n\n",
+        "Texture Textures[" + str(len(PrimaryTextureFilenames)) + "];\n"
+        "\n",
+        "// Put the object(s) on the scene\n",
+        "void populateScene(Scene *scene, Light lightSrc, MathStat *m, FuncStat *f)\n",
+        "{\n",
+        "    //fixedp normal[3];\t// Storage for calculated surface normal\n",
+        "    \n"]
+    
+    FOOTER = ["Vector draw(Ray ray, Scene scene, Light light, int recursion, MathStat *m, FuncStat *f)\n",
+        "{\n",
+        "    Hit hit;\n",
+        "    Vector outputColour, reflectiveColour, refractiveColour, textureColour;\n",
+        "    fixedp reflection, refraction;\n",
+        "    \n",
+        "    (*f).draw++;\n",
+        "    \n",
+        "    // Default is black. We can add to this (if there's a hit) \n",
+        "    // or just return it (if there's no object)\n",
+        "    setVector(&outputColour, 0, 0, 0, f);\n",
+        "    \n",
+        "    hit = sceneIntersection(ray, scene, m, f);\n",
+        "    \n",
+        "    // Determine whether there was a hit. Otherwise default.\n",
+        "    if (hit.objectIndex >= 0)\n",
+        "    {\n",
+        "        // There was a hit.\n",
+        "        Vector lightDirection = vecNormalised(vecSub(light.location, hit.location, m, f), m, f);\n",
+        "        \n",
+        "        // Determine whether this has a texture or not\n",
+        "        if (scene.object[hit.objectIndex].material.textureIdx < 0)\n",
+        "            setVector(&textureColour, -1, -1, -1, f);\n",
+        "        else\n",
+        "            textureColour = getColour(Textures[scene.object[hit.objectIndex].material.textureIdx], scene, hit, m, f);\n\n",
+        "        // outputColour = vecAdd(ambiance(hit, scene, light, m, f), diffusion(hit, scene, light, m, f), m, f);\n",
+        "        outputColour = vecAdd(ambiance(hit, scene, light, textureColour, m, f), vecAdd(diffusion(hit, scene, light, lightDirection, textureColour, m, f), specular(hit, scene, light, lightDirection, textureColour, m, f), m, f), m, f);\n",
+        "        \n",
+        "        // Should we go deeper?\n",
+        "        if (recursion > 0)\n",
+        "        {\n",
+        "            // Yes, we should\n",
+        "            // Get the reflection\n",
+        "            reflectiveColour = draw(reflectRay(hit, m, f), scene, light, recursion - 1, m, f);\n",
+        "            statSubtractInt(m, 1);\n",
+        "            reflection = scene.object[hit.objectIndex].material.reflectivity;\n",
+        "            outputColour = vecAdd(outputColour, scalarVecMult(reflection, reflectiveColour, m, f), m, f);\n",
+        "            \n",
+        "            // Get the refraction\n",
+        "            refractiveColour = draw(refractRay(hit, scene.object[hit.objectIndex].material.inverserefractivity, scene.object[hit.objectIndex].material.squareinverserefractivity, m, f), scene, light, recursion - 1, m, f);\n",
+        "            statSubtractInt(m, 1);\n",
+        "            refraction = scene.object[hit.objectIndex].material.opacity;\n",
+        "            outputColour = vecAdd(outputColour, scalarVecMult(refraction, refractiveColour, m, f), m, f);\n",
+        "        }\n",
+        "        \n",
+        "        // We've got what we needed after the hit, so return\n",
+        "        statSubtractFlt(m, 1);\n",
+        "        return scalarVecMult(fp_fp1 - traceShadow(hit, scene, light, lightDirection, m, f), outputColour, m, f);\n",
+        "    }\n",
+        "    \n",
+        "    // No hit, return black.\n",
+        "    \n",
+        "    return outputColour;\n",
+        "}\n",
+        "\n",
+        "#endif\n"]
+    
+    outFile = open(filename, 'w')
+    outFile.writelines(HEADER)
+    
+    outFile.write("    Object myObj;\n")
+    outFile.write("    Material myMat[" + str(numberOfMaterials) + "];\n")
+    outFile.write("    Vector lgrey = int2Vector(LIGHT_GREY);\n")
+    outFile.write("    Vector u, v, w;\n\n")
+    outFile.write("    UVCoord uUV, vUV, wUV;\n\n")
+    outFile.write("    initialiseScene(scene, " + str(numberOfMaterials) + ", f);\n")
+    outFile.write("    Triangle *triangle;\n")
+    
+    # Now load up all the necessary texture files:
+    for textIdx, fn in enumerate(PrimaryTextureFilenames):
+        outFile.write("    ReadTexture(&Textures[" + str(textIdx) + "],\"" + fn[:-3] + "tga\", f);\n")
+    # And, whilst here, let's set up the materials cache:
+    for materialPath in materialDB:
+        for curIdx, textureIdx in zip(materialDB[materialPath], textureDB[materialPath]):
+            outFile.write("    setMaterial(&myMat[" + str(curIdx) + "], lightSrc, lgrey, fp_Flt2FP(1.0), 0, fp_Flt2FP(0.1), fp_Flt2FP(0.5), fp_Flt2FP(0.2), 0, fp_Flt2FP(1.4), " + str(textureIdx) + ", m, f);\n")
+    
+    print "\n"
+    
+    # This part goes through all records, adding them and translating the contents to C.
+    # This will link all the necessary textures too.
+    for niceFilename in TransformationList:
+        # Process this transformation matrix. This means converting the 4 x 4 to a 4 x 3:
+        print "\rAdding model: " + niceFilename[niceFilename.rindex(os.path.sep)+1:niceFilename.rindex('.')],
+        
+        theseCoordinates = np.hstack((coordinates[niceFilename], np.ones((coordinates[niceFilename].shape[0], 1))))
+        theseUVCoords = textureCoordinates[niceFilename]['Coords']
+        thesePatterns = textureCoordinates[niceFilename]['TexturePattern'] - np.min(textureCoordinates[niceFilename]['TexturePattern'].flatten())
+        
+        groupedCoords = np.zeros((0, 3))
+        groupedPatterns = np.zeros((0, 1))
+        groupedUVCoords = np.zeros((0, 2))
+        
+        # Extract the transformation matrix
+        for transIdx, transMat in enumerate(TransformationList[niceFilename]):
+            if transMat is not None:                
+                transMat = np.vstack((transMat[:3, :3].T, transMat[3, :3]))
+            else:
+                transMat = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]])
+            transCoords = np.dot(theseCoordinates, transMat)
+            
+            groupedCoords = np.vstack([groupedCoords, transCoords])
+            groupedPatterns = np.vstack([groupedPatterns, thesePatterns])
+            groupedUVCoords = np.vstack([groupedUVCoords, theseUVCoords])
+        
+        # Now we have all the information necessary. Time to go through the pattern indices
+        for textIdx, matIdx in enumerate(materialDB[niceFilename]):
+            # Obtain the subset of coordinates based on the pattern index
+            coordSubset = groupedCoords[groupedPatterns.flatten() == textIdx, :]
+            UVSubset = groupedUVCoords[groupedPatterns.flatten() == textIdx, :]
+            # Compute how many triangles we're dealing with
+            noTrianglesSubset = coordSubset.shape[0] / 3
+            outFile.write("    triangle = (Triangle *)malloc(sizeof(Triangle) * " + str(noTrianglesSubset) + ");\n")
+            for idx in range(0, coordSubset.shape[0], 3):
+                v1, v2, v3 = coordSubset[idx, :]
+                outFile.write("    setVector(&u, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
+                outFile.write("    setUVCoord(&uUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (UVSubset[idx, 0], UVSubset[idx, 1]))
+                
+                v1, v2, v3 = coordSubset[idx + 1, :]
+                outFile.write("    setVector(&v, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
+                outFile.write("    setUVCoord(&vUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (UVSubset[idx + 1, 0], UVSubset[idx + 1, 1]))
+                
+                v1, v2, v3 = coordSubset[idx + 2, :]
+                outFile.write("    setVector(&w, fp_Flt2FP(%ff), fp_Flt2FP(%ff), fp_Flt2FP(%ff), f);\n" % (v1, v2, v3))
+                outFile.write("    setUVCoord(&wUV, fp_Flt2FP(%ff), fp_Flt2FP(%ff));\n" % (UVSubset[idx + 2, 0], UVSubset[idx + 2, 1]))
+                
+                outFile.write("    setUVTriangle(&triangle[" + str(idx / 3) + "], u, v, w, uUV, vUV, wUV, m, f);\n\n")
+            # Triangle writing is complete. Now set the object, etc.
+            outFile.write("    setObject(&myObj, myMat[" + str(matIdx) + "], " + str(noTrianglesSubset) + ", triangle, f);\n\n")
+            outFile.write("    addObject(scene, myObj, f);\n")
+    print("\rFinished adding models.\n")
+    
+    outFile.write("}\n\n")
+    # Lastly, write footer
+    outFile.writelines(FOOTER)
+    outFile.close()
