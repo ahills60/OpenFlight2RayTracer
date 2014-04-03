@@ -11,6 +11,7 @@ Version: 0.0.1 (01/04/2014)
 """
 
 import numpy as np
+import struct
 
 def ExtractWorld(dictIn):
     """
@@ -299,4 +300,67 @@ def ByteCodeWriter(listin, filename="World.crt"):
     This function creates a file (default: World.crt).
     """
     
-    pass
+    outFile = open(filename, 'wb')
+    # Number of materials
+    matCount = listin.pop(0)
+    outFile.write(struct.pack('i', matCount))
+    # Number of textures
+    textCount = listin.pop(0)
+    outFile.write(struct.pack('i', textCount))
+    
+    # And now the list of filenames:
+    for idx in range(textCount):
+        strSize = listin.pop(0)
+        outFile.write(struct.pack('i', strSize))
+        outFile.write(struct.pack(str(strSize) + 's', listin.pop(0)))
+    zeroCheck = listin.pop(0)
+    if zeroCheck != 0:
+        outFile.close()
+        raise Exception("Error encountered entering filenames. Failed zero check.")
+    outFile.write(struct.pack('i', 0))
+    
+    # Now to process the material indices and texture indices:
+    for idx in range(matCount):
+        # Material Index
+        outFile.write(struct.pack('i', listin.pop(0)))
+        # Texture Index
+        outFile.write(struct.pack('i', listin.pop(0)))
+    zeroCheck = listin.pop(0)
+    if zeroCheck != 0:
+        outFile.close()
+        raise Exception("Error encountered pairing materials with textures. Failed zero check.")
+    
+    outFile.write(struct.pack('i', 0))
+    
+    # Finally, go through triangles and create objects. Do this until the list is empty:
+    while len(listin) > 0:
+        # Expect a number of triangles:
+        triCount = listin.pop(0)
+        outFile.write(struct.pack('i', listin.pop(0)))
+        for idx in range(triCount):
+            # Each triangle
+            for PointIdx in range(3):
+                # Corners of triangle
+                for AxisIdx in range(3):
+                    # for u, v and w
+                    PointVal = listin.pop(0)
+                    if PointVal > 65536:
+                        raise Exception("Point axis value overflow in fixed point conversion")
+                    outFile.write(struct.pack('i', int(PointVal * 65536)))
+                # UV coordinates
+                for AxisIdx in range(3):
+                    PointVal = listin.pop(0)
+                    if PointVal > 65536:
+                        raise Exception("Point UV value overflow in fixed point conversion")
+                    outFile.write(struct.pack('i', int(PointVal * 65536)))
+        # Now to get the material index:
+        outFile.write(struct.pack('i', listin.pop(0)))
+        # Then zero check:
+        zeroCheck = listin.pop(0)
+        if zeroCheck != 0:
+            outFile.close()
+            raise Exception("Error encountered pairing triangle points with UV values. Failed zero check.")
+    print "Done."
+    outFile.close()
+    
+    
