@@ -282,7 +282,7 @@ def ExtractWorld(dictIn):
                     OutputList.extend([v1, v2, v3])
                     # Then UV of this point:
                     u1, u2 = UVSubset[idx + offset, :]
-                    outputLIst.extend([u1, u2])
+                    outputList.extend([u1, u2])
             # This concludes all the triangles. Now send the material index:
             OutputList.append(matIdx)
             # Then send a zero to denote the end of the record:
