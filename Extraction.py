@@ -1122,7 +1122,7 @@ def CreateWorldHeaderFile(dictIn, filename = "OFconstruct.h"):
                 if item['Datatype'] != "ExternalReference":
                     continue
                 # This record is appropriate
-                if len(TempList) > 2:
+                if len(TempList) > 1:
                     FocussedRecordsList.append(tuple(TempList))
                     TempList = []
                 if len(TempList) == 1:
@@ -1141,7 +1141,7 @@ def CreateWorldHeaderFile(dictIn, filename = "OFconstruct.h"):
                 TempList.append(item)
             elif isinstance(item, np.ndarray):
                 # This is a matrix record
-                if len(TempList) > 2:
+                if len(TempList) > 1:
                     FocussedRecordsList.append(tuple(TempList))
                     TempList = []
                 if len(TempList) == 1:
@@ -1246,9 +1246,10 @@ def CreateWorldHeaderFile(dictIn, filename = "OFconstruct.h"):
         if item[0]['NewFilename'] not in PrimaryModelFiles:
             PrimaryModelFiles.append(item[0]['NewFilename'])
     
-    # Now remove files with the flt texension and assume that these are texture files:
+    # Assume that all models were added to the PrimaryModelFiles variable. This
+    # should leave behind textures. Save the remainder as textures:
     for item in dictIn['External']:
-        if item[-4:] != ".flt":
+        if item not in PrimaryModelFiles:
             PrimaryTextureFiles.append(item)
     
     textureDB = dict()
