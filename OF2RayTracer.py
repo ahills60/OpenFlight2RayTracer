@@ -11,6 +11,7 @@ Version: 0.0.1 (01/04/2014)
 """
 
 import numpy as np
+import os
 import struct
 
 def ExtractWorld(dictIn):
@@ -37,7 +38,7 @@ def ExtractWorld(dictIn):
                 if item['Datatype'] != "ExternalReference":
                     continue
                 # This record is appropriate
-                if len(TempList) > 2:
+                if len(TempList) > 1:
                     FocussedRecordsList.append(tuple(TempList))
                     TempList = []
                 if len(TempList) == 1:
@@ -56,7 +57,7 @@ def ExtractWorld(dictIn):
                 TempList.append(item)
             elif isinstance(item, np.ndarray):
                 # This is a matrix record
-                if len(TempList) > 2:
+                if len(TempList) > 1:
                     FocussedRecordsList.append(tuple(TempList))
                     TempList = []
                 if len(TempList) == 1:
@@ -188,7 +189,7 @@ def ExtractWorld(dictIn):
             # couple the texture index with the primary texture index.
             textureDB[modelPath].append(PrimaryTextureFiles.index(textureRecord['Filename']))
     # And we can then get this useful stat.
-    numberOfMaterials = currIdx + 1
+    numberOfMaterials = currIdx
     
     # Now let's go through the primary texture files and correct the file separators
     # and remove the path. This requires us to go through the primary list and alter
@@ -221,14 +222,14 @@ def ExtractWorld(dictIn):
     for textIdx, fn in enumerate(PrimaryTextureFilenames):
         # This will make reading strings easier in C
         OutputList.append(len(fn))
-        OutputList.append(fn[:-3] + ".tga")
+        OutputList.append(fn[:-3] + "tga")
     
     # Now that that's done, add a zero to separate:
     OutputList.append(0)
     
     # Then set up the materials cache:
     for materialPath in materialDB:
-        for curIdx, texutreIdx in zip(materialDB[materialPath], textureDB[materialPath]):
+        for curIdx, textureIdx in zip(materialDB[materialPath], textureDB[materialPath]):
             OutputList.append(int(curIdx))
             OutputList.append(int(textureIdx))
     
@@ -256,7 +257,7 @@ def ExtractWorld(dictIn):
                 # There isn't a transformation matrix. Use identity matrix
                 transMat = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]])
             # Before finally multiplying through
-            transCoords = np.dot(theseCoordiantes, transMat)
+            transCoords = np.dot(theseCoordinates, transMat)
             
             # Next, extract and append the grouped components:
             groupedCoords = np.vstack([groupedCoords, transCoords])
@@ -275,7 +276,7 @@ def ExtractWorld(dictIn):
             OutputList.append(noTrianglesSubset)
             
             # Then go through each triangle componenet and add this to the list:
-            for idx in range(0, coordSubset, 3):
+            for idx in range(0, coordSubset.shape[0], 3):
                 # 3 points in a triangle
                 for offset in range(3):
                     v1, v2, v3 = coordSubset[idx + offset, :]
@@ -283,7 +284,7 @@ def ExtractWorld(dictIn):
                     OutputList.extend([v1, v2, v3])
                     # Then UV of this point:
                     u1, u2 = UVSubset[idx + offset, :]
-                    outputList.extend([u1, u2])
+                    OutputList.extend([u1, u2])
             # This concludes all the triangles. Now send the material index:
             OutputList.append(matIdx)
             # Then send a zero to denote the end of the record:
@@ -302,10 +303,10 @@ def ByteCodeWriter(listin, filename="World.crt"):
     
     outFile = open(filename, 'wb')
     # Number of materials
-    matCount = listin.pop(0)
+    matCount = int(listin.pop(0))
     outFile.write(struct.pack('i', matCount))
     # Number of textures
-    textCount = listin.pop(0)
+    textCount = int(listin.pop(0))
     outFile.write(struct.pack('i', textCount))
     
     # And now the list of filenames:
@@ -335,8 +336,8 @@ def ByteCodeWriter(listin, filename="World.crt"):
     # Finally, go through triangles and create objects. Do this until the list is empty:
     while len(listin) > 0:
         # Expect a number of triangles:
-        triCount = listin.pop(0)
-        outFile.write(struct.pack('i', listin.pop(0)))
+        triCount = int(listin.pop(0))
+        outFile.write(struct.pack('i', triCount))
         for idx in range(triCount):
             # Each triangle
             for PointIdx in range(3):
@@ -348,7 +349,7 @@ def ByteCodeWriter(listin, filename="World.crt"):
                         raise Exception("Point axis value overflow in fixed point conversion")
                     outFile.write(struct.pack('i', int(PointVal * 65536)))
                 # UV coordinates
-                for AxisIdx in range(3):
+                for AxisIdx in range(2):
                     PointVal = listin.pop(0)
                     if PointVal > 65536:
                         raise Exception("Point UV value overflow in fixed point conversion")
@@ -360,6 +361,7 @@ def ByteCodeWriter(listin, filename="World.crt"):
         if zeroCheck != 0:
             outFile.close()
             raise Exception("Error encountered pairing triangle points with UV values. Failed zero check.")
+        outFile.write(struct.pack('i', 0))
     print "Done."
     outFile.close()
     
