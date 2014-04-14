@@ -285,6 +285,50 @@ def ExtractWorld(dictIn):
                     # Then UV of this point:
                     u1, u2 = UVSubset[idx + offset, :]
                     OutputList.extend([u1, u2])
+                # Now precompute values for Barycentric coordinate system
+                A = coordSubset[idx, :]
+                B = coordSubset[idx + 1, :]
+                C = coordSubset[idx + 2, :]
+                c = B - A
+                b = C - A
+                m_N = np.cross(b, c)
+                
+                # Now determine which is the dominant axis
+                k = np.abs(m_N).argmax()
+                u = (k + 1) % 3
+                v = (k + 1) % 3
+                
+                if m_N[k] == 0.0:
+                    krec = 1.0
+                else:
+                    krec = 1.0 / m_N[k]
+                nu = m_N[u] * krec
+                nv = m_N[v] * krec
+                nd = np.dot(m_N, A) * krec
+                # First line of equation
+                if (b[u] * c[v] - b[v] * c[u]) == 0.0:
+                    reci = 1.0
+                else:
+                    reci = 1.0 / (b[u] * c[v] - b[v] * c[u])
+                bnu = b[u] * reci
+                bnv = -b[v] * reci
+                # Second line of equation
+                cnu = c[v] * reci
+                cnv = -c[u] * reci
+                if (m_N ** 2).sum() == 0.0:
+                    m_N_norm = m_N
+                else:
+                    m_N_norm = m_N / np.sqrt((m_N ** 2).sum())
+                
+                # Now enter these variables
+                OutputList.append(k)
+                OutputList.extend(c.tolist())
+                OutputList.extend(b.tolist())
+                OutputList.extend(m_N.tolist())
+                OutputList.extend(m_N_norm.tolist())
+                # And then the remaining floats
+                OutputList.extend([nu, nv, nd, bnu, bnv, cnu, cnv])
+            
             # This concludes all the triangles. Now send the material index:
             OutputList.append(matIdx)
             # Then send a zero to denote the end of the record:
@@ -354,6 +398,21 @@ def ByteCodeWriter(listin, filename="World.crt"):
                     if PointVal > 65536:
                         raise Exception("Point UV value overflow in fixed point conversion")
                     outFile.write(struct.pack('i', int(PointVal * 65536)))
+            # Now to enter precomputed values:
+            # k:
+            outFile.write(struct.pack('i', int(listin.pop(0))))
+            # c, b, m_N, m_N_norm:
+            for PointIdx in range(4):
+                # For the different variables
+                for Axis in range(3):
+                    PointVal = listin.pop(0)
+                    if PointVal > 65536:
+                        raise Exception("Pre-calculation value overflow in fixed point conversion")
+                    outFile.write(struct.pack('i', int(PointVal * 65536)))
+            
+            # Seven remaining items:
+            for item in range(7):
+                outFile.write(struct.pack('i', int(listin.pop(0) * 65536)))
         # Now to get the material index:
         outFile.write(struct.pack('i', listin.pop(0)))
         # Then zero check:
