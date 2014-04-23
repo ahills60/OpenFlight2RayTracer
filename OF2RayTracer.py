@@ -365,11 +365,15 @@ def ByteCodeWriter(listin, filename="World.crt"):
     outFile.write(struct.pack('i', 0))
     
     # Now to process the material indices and texture indices:
-    for idx in range(matCount):
-        # Material Index
-        outFile.write(struct.pack('i', listin.pop(0)))
-        # Texture Index
-        outFile.write(struct.pack('i', listin.pop(0)))
+    # Let's do this as a batch:
+    subList = listin[:(2*matCount)]
+    listin = listin[(2*matCount):]
+    outFile.write(struct.pack('%si' % (2 * matCount), *subList))
+    # for idx in range(matCount):
+    #     # Material Index
+    #     outFile.write(struct.pack('i', listin.pop(0)))
+    #     # Texture Index
+    #     outFile.write(struct.pack('i', listin.pop(0)))
     zeroCheck = listin.pop(0)
     if zeroCheck != 0:
         outFile.close()
@@ -384,35 +388,53 @@ def ByteCodeWriter(listin, filename="World.crt"):
         outFile.write(struct.pack('i', triCount))
         for idx in range(triCount):
             # Each triangle
-            for PointIdx in range(3):
-                # Corners of triangle
-                for AxisIdx in range(3):
-                    # for u, v and w
-                    PointVal = listin.pop(0)
-                    if PointVal > 65536:
-                        raise Exception("Point axis value overflow in fixed point conversion")
-                    outFile.write(struct.pack('i', int(PointVal * 65536)))
-                # UV coordinates
-                for AxisIdx in range(2):
-                    PointVal = listin.pop(0)
-                    if PointVal > 65536:
-                        raise Exception("Point UV value overflow in fixed point conversion")
-                    outFile.write(struct.pack('i', int(PointVal * 65536)))
+            # Let's do this as a batch
+            subList = np.array(listin[:15])
+            listin = listin[15:]
+            if np.any(subList >= 65536):
+                raise Exception("Point axis or UV value overflow in fixed point conversion")
+            # Now convert to a list again and then write the contents to the file:
+            subList = (subList * 65536).astype(int).tolist()
+            outFile.write(struct.pack('15i', *subList))
+            # for PointIdx in range(3):
+            #     # Corners of triangle
+            #     for AxisIdx in range(3):
+            #         # for u, v and w
+            #         PointVal = listin.pop(0)
+            #         if PointVal > 65536:
+            #             raise Exception("Point axis value overflow in fixed point conversion")
+            #         outFile.write(struct.pack('i', int(PointVal * 65536)))
+            #     # UV coordinates
+            #     for AxisIdx in range(2):
+            #         PointVal = listin.pop(0)
+            #         if PointVal > 65536:
+            #             raise Exception("Point UV value overflow in fixed point conversion")
+            #         outFile.write(struct.pack('i', int(PointVal * 65536)))
             # Now to enter precomputed values:
             # k:
             outFile.write(struct.pack('i', int(listin.pop(0))))
             # c, b, m_N, m_N_norm:
-            for PointIdx in range(4):
-                # For the different variables
-                for Axis in range(3):
-                    PointVal = listin.pop(0)
-                    if PointVal > 65536:
-                        raise Exception("Pre-calculation value overflow in fixed point conversion")
-                    outFile.write(struct.pack('i', int(PointVal * 65536)))
+            # 4 vectors + 7 values = 12 + 7 = 19
+            
+            subList = np.array(listin[:19])
+            listin = listin[19:]
+            if np.any(subList >= 65536):
+                raise Exception("Pre-calculation value overflow in fixed point conversion")
+            # Now convert the list again and then write the contents to a file:
+            subList = (subList * 65536).astype(int).tolist()
+            outFile.write(struct.pack('19i', *subList))
+            
+            # for PointIdx in range(4):
+            #     # For the different variables
+            #     for Axis in range(3):
+            #         PointVal = listin.pop(0)
+            #         if PointVal > 65536:
+            #             raise Exception("Pre-calculation value overflow in fixed point conversion")
+            #         outFile.write(struct.pack('i', int(PointVal * 65536)))
             
             # Seven remaining items:
-            for item in range(7):
-                outFile.write(struct.pack('i', int(listin.pop(0) * 65536)))
+            # for item in range(7):
+            #     outFile.write(struct.pack('i', int(listin.pop(0) * 65536)))
         # Now to get the material index:
         outFile.write(struct.pack('i', listin.pop(0)))
         # Then zero check:
