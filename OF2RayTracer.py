@@ -296,7 +296,7 @@ def ExtractWorld(dictIn):
                 # Now determine which is the dominant axis
                 k = np.abs(m_N).argmax()
                 u = (k + 1) % 3
-                v = (k + 1) % 3
+                v = (k + 2) % 3
                 
                 if m_N[k] == 0.0:
                     krec = 1.0
