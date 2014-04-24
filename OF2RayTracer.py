@@ -381,11 +381,14 @@ def ByteCodeWriter(listin, filename="World.crt"):
     
     outFile.write(struct.pack('i', 0))
     
+    verticesList = []
+    
     # Finally, go through triangles and create objects. Do this until the list is empty:
     while len(listin) > 0:
         # Expect a number of triangles:
+        tempList = []
         triCount = int(listin.pop(0))
-        outFile.write(struct.pack('i', triCount))
+        tempList.append(triCount)
         for idx in range(triCount):
             # Each triangle
             # Let's do this as a batch
@@ -395,7 +398,7 @@ def ByteCodeWriter(listin, filename="World.crt"):
                 raise Exception("Point axis or UV value overflow in fixed point conversion")
             # Now convert to a list again and then write the contents to the file:
             subList = (subList * 65536).astype(int).tolist()
-            outFile.write(struct.pack('15i', *subList))
+            tempList.extend(subList)
             # for PointIdx in range(3):
             #     # Corners of triangle
             #     for AxisIdx in range(3):
@@ -412,7 +415,7 @@ def ByteCodeWriter(listin, filename="World.crt"):
             #         outFile.write(struct.pack('i', int(PointVal * 65536)))
             # Now to enter precomputed values:
             # k:
-            outFile.write(struct.pack('i', int(listin.pop(0))))
+            tempList.append(int(listin.pop(0)))
             # c, b, m_N, m_N_norm:
             # 4 vectors + 7 values = 12 + 7 = 19
             
@@ -422,7 +425,7 @@ def ByteCodeWriter(listin, filename="World.crt"):
                 raise Exception("Pre-calculation value overflow in fixed point conversion")
             # Now convert the list again and then write the contents to a file:
             subList = (subList * 65536).astype(int).tolist()
-            outFile.write(struct.pack('19i', *subList))
+            tempList.extend(subList)
             
             # for PointIdx in range(4):
             #     # For the different variables
@@ -436,13 +439,16 @@ def ByteCodeWriter(listin, filename="World.crt"):
             # for item in range(7):
             #     outFile.write(struct.pack('i', int(listin.pop(0) * 65536)))
         # Now to get the material index:
-        outFile.write(struct.pack('i', listin.pop(0)))
+        tempList.append(listin.pop(0))
         # Then zero check:
         zeroCheck = listin.pop(0)
         if zeroCheck != 0:
             outFile.close()
             raise Exception("Error encountered pairing triangle points with UV values. Failed zero check.")
-        outFile.write(struct.pack('i', 0))
+        tempList.append(0)
+        verticesList.extend(tempList)
+    print "Triangle processing complete. Now attempting to write data to file..."
+    outFile.write(struct.pack('%ii' % len(verticesList), *verticesList))
     print "Done."
     outFile.close()
     
