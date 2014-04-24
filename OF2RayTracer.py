@@ -382,6 +382,7 @@ def ByteCodeWriter(listin, filename="World.crt"):
     outFile.write(struct.pack('i', 0))
     
     verticesList = []
+    grpCount = 0
     
     # Finally, go through triangles and create objects. Do this until the list is empty:
     while len(listin) > 0:
@@ -389,6 +390,8 @@ def ByteCodeWriter(listin, filename="World.crt"):
         tempList = []
         triCount = int(listin.pop(0))
         tempList.append(triCount)
+        grpCount += 1
+        print "Processing triangle group %i..." %grpCount
         for idx in range(triCount):
             # Each triangle
             # Let's do this as a batch
