@@ -398,6 +398,7 @@ def ByteCodeWriter(listin, filename="World.crt"):
             subList = np.array(listin[:15])
             listin = listin[15:]
             if np.any(subList >= 65536):
+                outFile.close()
                 raise Exception("Point axis or UV value overflow in fixed point conversion")
             # Now convert to a list again and then write the contents to the file:
             subList = (subList * 65536).astype(int).tolist()
@@ -425,6 +426,7 @@ def ByteCodeWriter(listin, filename="World.crt"):
             subList = np.array(listin[:19])
             listin = listin[19:]
             if np.any(subList >= 65536):
+                outFile.close()
                 raise Exception("Pre-calculation value overflow in fixed point conversion")
             # Now convert the list again and then write the contents to a file:
             subList = (subList * 65536).astype(int).tolist()
