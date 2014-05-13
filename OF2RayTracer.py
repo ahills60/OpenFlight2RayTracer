@@ -730,7 +730,7 @@ def AIO(dictIn, filename = "World.crt"):
     
     # This is when things get complicated. Go through the list of transformations:
     for transIdx, niceFilename in enumerate(TransformationList):
-        print "Processing triangle group %i of %i..." % (transIdx, len(TransformationList))
+        print "Processing triangle group %i of %i..." % (transIdx + 1, len(TransformationList))
         theseCoordinates = np.hstack((coordinates[niceFilename], np.ones((coordinates[niceFilename].shape[0], 1))))
         theseUVCoords = textureCoordinates[niceFilename]['Coords']
         thesePatterns = textureCoordinates[niceFilename]['TexturePattern'] - np.min(textureCoordinates[niceFilename]['TexturePattern'].flatten())
@@ -745,7 +745,7 @@ def AIO(dictIn, filename = "World.crt"):
             # Check what the transformation matrix variable contains:
             if transMat is not None:
                 # retrieve the necessary components:
-                transMat = np.vstack((transMat[:3, :3].T, transMat[3, :3]))
+                transMat = np.vstack((transMat[:3, :3], transMat[3, :3])) # np.vstack((transMat[:3, :3].T, transMat[3, :3]))
             else:
                 # There isn't a transformation matrix. Use identity matrix
                 transMat = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]])
