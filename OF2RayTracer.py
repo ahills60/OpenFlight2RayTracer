@@ -789,7 +789,7 @@ def AIO(dictIn, filename = "World.crt"):
                 C = coordSubset[idx + 2, :]
                 c = B - A
                 b = C - A
-                m_N = np.cross(b, c)
+                m_N = np.cross(c, b)
                 
                 # Now determine which is the dominant axis
                 k = np.abs(m_N).argmax()
