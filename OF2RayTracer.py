@@ -511,6 +511,14 @@ def AIO(dictIn, filename = "World.crt"):
                         continue
                 # If here, it's safe to append the item
                 TempList.append(item)
+        
+        # Empty stack if required
+        if len(TempList) == 1:
+            if isinstance(TempList[0], dict):
+                TempList.append(None)
+                FocussedRecordsList.append(TempList)
+        elif len(TempList) == 2:
+            FocussedRecordsList.append(TempList)
         return FocussedRecordsList
     
     # The following function is essentially a copy of the previous VertexListToComplexTextureCoords
