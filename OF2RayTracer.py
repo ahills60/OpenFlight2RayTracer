@@ -748,7 +748,7 @@ def AIO(dictIn, filename = "World.crt"):
                 transMat = np.vstack((transMat[:3, :3], transMat[3, :3])) # np.vstack((transMat[:3, :3].T, transMat[3, :3]))
             else:
                 # There isn't a transformation matrix. Use identity matrix
-                transMat = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]])
+                transMat = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0]])
             # Before finally multiplying through
             transCoords = np.dot(theseCoordinates, transMat)
             
