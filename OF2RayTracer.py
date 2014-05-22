@@ -545,6 +545,11 @@ def AIO(dictIn, filename = "World.crt"):
             if 'VertexList' not in dictIn['External'][key]:
                 continue
             
+            textList = dictIn['External'][key]['Textures']
+            
+            # For all textures used, extract the texture attributes
+            textureAttributes = [[dictIn['External'][item['Filename']]['WrapMethodUV'], dictIn['External'][item['Filename']]['WrapMethodU'], dictIn['External'][item['Filename']]['WrapMethodV']] for item in textList]
+            
             for item, txpidx in zip(dictIn['External'][key]['VertexList'], dictIn['External'][key]['TexturePatterns']):
                 tempMat = None
                 for idx, offset in enumerate(item):
@@ -557,6 +562,46 @@ def AIO(dictIn, filename = "World.crt"):
                 newObject[key] = dict()
                 newObject[key]['Coords'] = np.vstack(tempList)
                 newObject[key]['TexturePattern'] = np.vstack(tempList2)
+            # Now solve the wrap method problem
+            for idx, item in enumerate(textureAttributes):
+                tempCoords = newObject[key]['Coords'][newObject[key]['TexturePattern'].flatten() == idx, :]
+                # For U first:
+                UType = 0
+                if item[1] == 3:
+                    # Use UV:
+                    UType = item[0]
+                else:
+                    UType = item[1]
+                # Now V:
+                VType = 0
+                if item[2] == 3:
+                    # Use UV:
+                    VType = item[0]
+                else:
+                    VType = item[2]
+                # Alter UV based on above:
+                if UType == 0:
+                    # Repeat U
+                    tempCoords[:, 0] = np.abs(np.floor(tempCoords[:, 0]) - tempCoords[:, 0])
+                elif UType == 1:
+                    # Clamp U
+                    tempCoords[tempCoords[:, 0] > 1., 0] = 1.
+                    tempCoords[tempCoords[:, 0] < 0., 0] = 0.
+                elif UType == 4:
+                    raise NotImplemented("I don't yet know how to deal with mirrored textures.")
+                if VType == 0:
+                    # Repeat V
+                    tempCoords[:, 1] = np.abs(np.floor(tempCoords[:, 1]) - tempCoords[:, 1])
+                elif VType == 1:
+                    # Clamp V
+                    tempCoords[tempCoords[:, 1] > 1., 1] = 1.
+                    tempCoords[tempCoords[:, 1] < 0., 1] = 0.
+                elif VType == 4:
+                    raise NotImplemented("I don't yet know how to deal with mirrored textures.")
+                # Finally, replace the contents:
+                newObject[key]['Coords'][newObject[key]['TexturePattern'].flatten() == idx, :] = tempCoords
+            
+            
         return newObject
     
     # Similarly, this is a copy of the previously seen VertexListToCoords function but also
