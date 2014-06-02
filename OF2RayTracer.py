@@ -828,11 +828,11 @@ def AIO(dictIn, filename = "World.crt"):
                 for offset in range(3):
                     if np.any(coordSubset[idx + offset, :] > 32767.) or np.any(coordSubset[idx + offset, :] < -32768.):
                         print "\t\tCorner %i point coordinates of triangle %i exceeded threshold %s" % (offset, (idx / 3) + 1, str(coordSubset[idx + offset, :]))
-                    v1, v2, v3 = 65536 * coordSubset[idx + offset, :]
+                    v1, v2, v3 = 65536. * coordSubset[idx + offset, :]
                     # Coordinate of point first:
                     OutputList.extend([int(v1), int(v2), int(v3)])
                     # Then UV of this point:
-                    u1, u2 = 65536 * UVSubset[idx + offset, :]
+                    u1, u2 = 65536. * UVSubset[idx + offset, :]
                     if np.any(UVSubset[idx + offset, :] > 32767.) or np.any(UVSubset[idx + offset, :] < -32768.):
                         print "\t\tCorner %i UV coordinates of triangle %i exceeded threshold %s" % (offset, (idx / 3) + 1, str(UVSubset[idx + offset, :]))
                     OutputList.extend([int(u1), int(u2)])
@@ -1082,12 +1082,12 @@ def AIO(dictIn, filename = "World.crt"):
                     k = 13
                     cnv = 0
                 OutputList.append(k)
-                OutputList.extend((65536 * c).astype(int).tolist())
-                OutputList.extend((65536 * b).astype(int).tolist())
-                OutputList.extend((65536 * m_N).astype(int).tolist())
-                OutputList.extend((65536 * m_N_norm).astype(int).tolist())
+                OutputList.extend((65536. * c).astype(int).tolist())
+                OutputList.extend((65536. * b).astype(int).tolist())
+                OutputList.extend((65536. * m_N).astype(int).tolist())
+                OutputList.extend((65536. * m_N_norm).astype(int).tolist())
                 # And then the remaining floats
-                OutputList.extend([int(65536 * nu), int(65536 * nv), int(65536 * nd), int(65536 * bnu), int(65536 * bnv), int(65536 * cnu), int(65536 * cnv)])
+                OutputList.extend([int(65536. * nu), int(65536. * nv), int(65536. * nd), int(65536. * bnu), int(65536. * bnv), int(65536. * cnu), int(65536. * cnv)])
             
             # This concludes all the triangles. Now send the material index:
             OutputList.append(matIdx)
